@@ -3,6 +3,7 @@ import Reporter
 import numpy as np
 import random
 import statistics
+import time
 
 
 class Individual:
@@ -10,15 +11,15 @@ class Individual:
         self.tour = tour
         self.alpha = 0.05
 
-
 class Params:
+
+    # set start parameters
     def __init__(self, distanceMatrix):
-        self.popsize = 100  # population size
-        self.amountOfOffspring = 50  # amount individuals in the offspring
+        self.popsize = 200  # population size
+        self.amountOfOffspring = 100  # amount individuals in the offspring
         self.alpha = 0.05  # probability of mutation
         self.k = 15  # for k-tournament selection
-        self.distanceMatrix = distanceMatrix
-
+        self.distanceMatrix = distanceMatrix  # matrix with the cost between cities
 
 class r0680462:
 
@@ -55,7 +56,7 @@ class r0680462:
         return population[inds[index]]
 
     def swap_mutation(self, individual, nlen):
-        if (random.random() < individual.alpha):
+        if random.random() < individual.alpha:
             i1 = random.randint(0, nlen - 1)
             i2 = i1
             while (i1 == i2):
@@ -67,10 +68,10 @@ class r0680462:
 
     # randomly selects two cities and inserts one before the other
     def ordered_mutation(self, individual, nlen):
-        if (random.random() < individual.alpha):  # alpha % chance of mutation
+        if random.random() < individual.alpha:  # alpha % chance of mutation
             i1 = random.randint(0, nlen - 1)
             i2 = i1
-            while (i1 == i2):
+            while i1 == i2:
                 i2 = random.randint(0, nlen - 1)
             tour = individual.tour
             tmp = tour[i1]
@@ -103,13 +104,17 @@ class r0680462:
         # insert remaining values of p2 into child
         j = 0
         for i in range(len(child_tour)):
-            if (child_tour[i] == -1):
+            if (child_tour[i] == -1):  # empty spot
                 child_tour[i] = p2_tour[j]
                 j += 1
 
         # create child
         child = Individual(child_tour)
         return child
+
+    def print_population(self, population):
+        for ind in population:
+            print(ind.tour)
 
     # Calculate metrics of the population
     def calculate_metrics(self, population, distanceMatrix):
@@ -124,6 +129,7 @@ class r0680462:
         mean_objective = statistics.mean(fitnesses)
 
         return mean_objective, population[index_min_cost]
+
 
     # The evolutionary algorithm's main loop
     def optimize(self, filename):
@@ -143,29 +149,30 @@ class r0680462:
         improvement = True
 
         it = 0
-        while ((it < maxit) & (improvement)):
+        while (it < maxit) & improvement:
             it += 1
 
-            # Recombination
+            # recombination
             offspring = list()
             for i in range(params.amountOfOffspring):
                 parent1 = self.selection(params, population)
                 parent2 = self.selection(params, population)
-                # ordered mutation for offspring
-                offspring.append(self.ordered_crossover(parent1, parent2, nlen))
+                # ordered crossover for offspring
+                offspring.append(self.ordered_crossover(parent1, parent2, nlen))  # first child
+                offspring.append(self.ordered_crossover(parent2, parent1, nlen))  # second child
                 # swap mutation on the offspring
                 self.swap_mutation(offspring[i], nlen)
 
             # mutation seed population
-            for i in range(params.popsize):
+            for i in range(params.popsize-1):
                 self.swap_mutation(population[i], nlen)
 
             # combine seed population with offspring into new population
             population.extend(offspring)
 
             # elimination
-            self.elimination(population, params)
-
+            population = self.elimination(population, params)
+            #self.print_population(population)
             # calculate best individual and mean objective value
             meanObjective, best_ind = self.calculate_metrics(population, distanceMatrix)
             bestObjective = self.cost(best_ind, distanceMatrix)
@@ -181,6 +188,11 @@ class r0680462:
                 else:
                     last_best_cost = bestObjective
 
+            if it > 50:
+                for ind in population:
+                    ind.alpha = 0.5
+
+
             # Call the reporter with:
             #  - the mean objective function value of the population
             #  - the best objective function value of the population
@@ -193,6 +205,7 @@ class r0680462:
                 break
 
         print("best tour", best_ind.tour)
+
         return 0
 
 
