@@ -3,7 +3,7 @@ import Reporter
 import numpy as np
 import random
 import statistics
-import time
+import math
 
 
 class Individual:
@@ -15,10 +15,10 @@ class Params:
 
     # set start parameters
     def __init__(self, distanceMatrix):
-        self.popsize = 200  # population size
+        self.popsize = 250  # population size
         self.amountOfOffspring = 100  # amount individuals in the offspring
         self.alpha = 0.05  # probability of mutation
-        self.k = 15  # for k-tournament selection
+        self.k = 5  # for k-tournament selection
         self.distanceMatrix = distanceMatrix  # matrix with the cost between cities
 
 class r0680462:
@@ -29,7 +29,7 @@ class r0680462:
     def cost(self, ind, distanceMatrix):
         # calculate cost
         tour = ind.tour
-        cost = 0
+        cost = distanceMatrix[tour[0]][tour[len(tour)-1]]  # cost between first and last city to make circle complete
         for i in range(len(tour) - 1):
             cost += distanceMatrix[tour[i]][tour[i + 1]]
         return cost
@@ -140,12 +140,12 @@ class r0680462:
 
         # set parameters:
         params = Params(distanceMatrix)
-        maxit = 1000
+        maxit = 10000
         nlen = distanceMatrix.shape[0]
 
         # init population
         population = self.init(params, nlen)
-        last_best_cost = 10000000
+        last_best_cost = math.inf
         improvement = True
 
         it = 0
@@ -154,7 +154,7 @@ class r0680462:
 
             # recombination
             offspring = list()
-            for i in range(params.amountOfOffspring):
+            for i in range(math.ceil(params.amountOfOffspring/2)):
                 parent1 = self.selection(params, population)
                 parent2 = self.selection(params, population)
                 # ordered crossover for offspring
@@ -181,7 +181,7 @@ class r0680462:
             print(it, ")", "mean cost: ", meanObjective, "Lowest/best cost: ", bestObjective)
 
 
-            if it % 20 == 0:  # check if there is improvement every 20 iterations
+            if it % 30 == 0:  # check if there is improvement every x iterations
                 if last_best_cost < bestObjective + 50:
                     improvement = False
                     print("STOP by no improvement")
@@ -212,4 +212,4 @@ class r0680462:
 # calls optimize function
 class main:
     tsp = r0680462()
-    tsp.optimize("tour29.csv")
+    tsp.optimize("tour194.csv")
