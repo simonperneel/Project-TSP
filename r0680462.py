@@ -32,7 +32,7 @@ class r0680462:
         tour = ind.tour
         cost = distanceMatrix[tour[0]][tour[len(tour)-1]]  # cost between first and last city to make circle complete
         for i in range(len(tour) - 1):
-            cost += distanceMatrix[tour[i]][tour[i + 1]]
+            cost += distanceMatrix[tour[i]][tour[i+1]]
         return cost
 
     def init(self, params, nlen):
@@ -128,7 +128,7 @@ class r0680462:
         index_min_cost = fitnesses.index(min_cost)
 
         mean_objective = statistics.mean(fitnesses)
-        #diversity_estimate = statistics.stdev(fitnesses)
+        # diversity_estimate = statistics.stdev(fitnesses)
 
         return mean_objective, population[index_min_cost]
 
@@ -137,12 +137,18 @@ class r0680462:
         # Read distance matrix from file
         file = open(filename)
         distanceMatrix = np.loadtxt(file, delimiter=",")
+        nlen = distanceMatrix.shape[0]
+
+        # ban unconnected cities from population by setting their cost extremely high
+        for i in range(nlen-1):
+            for j in range(nlen-1):
+                if distanceMatrix[i][j] == math.inf:
+                    distanceMatrix[i][j] = 1000000
         file.close()
 
         # initialize parameters:
         params = Params(distanceMatrix)  # see class for the values
         maxit = 10000
-        nlen = distanceMatrix.shape[0]
 
         population = self.init(params, nlen)
         last_best_cost = math.inf
@@ -213,4 +219,4 @@ class r0680462:
 # todo call optimizer in separate file
 class main:
     tsp = r0680462()
-    tsp.optimize("tour29.csv")
+    tsp.optimize("tour100.csv")
