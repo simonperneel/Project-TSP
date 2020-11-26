@@ -3,13 +3,15 @@ import Reporter
 import numpy as np
 import random
 import statistics
+import sklearn.cluster as skl
 import math
+import time
 
 
 class Individual:
     def __init__(self, tour):
         self.tour = tour
-        self.alpha = 0.05
+        self.alpha = 0.05  # probability of mutation
 
 class Params:
 
@@ -17,7 +19,6 @@ class Params:
     def __init__(self, distanceMatrix):
         self.popsize = 250  # population size
         self.amountOfOffspring = 100  # amount individuals in the offspring
-        self.alpha = 0.05  # probability of mutation
         self.k = 5  # for k-tournament selection
         self.distanceMatrix = distanceMatrix  # matrix with the cost between cities
 
@@ -127,9 +128,9 @@ class r0680462:
         index_min_cost = fitnesses.index(min_cost)
 
         mean_objective = statistics.mean(fitnesses)
+        #diversity_estimate = statistics.stdev(fitnesses)
 
         return mean_objective, population[index_min_cost]
-
 
     # The evolutionary algorithm's main loop
     def optimize(self, filename):
@@ -138,18 +139,18 @@ class r0680462:
         distanceMatrix = np.loadtxt(file, delimiter=",")
         file.close()
 
-        # set parameters:
-        params = Params(distanceMatrix)
+        # initialize parameters:
+        params = Params(distanceMatrix)  # see class for the values
         maxit = 10000
         nlen = distanceMatrix.shape[0]
 
-        # init population
         population = self.init(params, nlen)
         last_best_cost = math.inf
         improvement = True
 
         it = 0
         while (it < maxit) & improvement:
+            start = time.time()
             it += 1
 
             # recombination
@@ -178,7 +179,9 @@ class r0680462:
             bestObjective = self.cost(best_ind, distanceMatrix)
             bestSolution = best_ind.tour
 
-            print(it, ")", "mean cost: ", meanObjective, "Lowest/best cost: ", bestObjective)
+            itT = time.time() - start
+            print(it, ")", f'{itT: 0.3f} sec ',  "mean cost: ", f'{meanObjective:0.2f}', "Lowest/best cost: ",
+                  f'{bestObjective:0.2f}')
 
 
             if it % 30 == 0:  # check if there is improvement every x iterations
@@ -187,10 +190,6 @@ class r0680462:
                     print("STOP by no improvement")
                 else:
                     last_best_cost = bestObjective
-
-            if it > 50:
-                for ind in population:
-                    ind.alpha = 0.5
 
 
             # Call the reporter with:
@@ -205,11 +204,13 @@ class r0680462:
                 break
 
         print("best tour", best_ind.tour)
-
+        print("cost best tour", f'{bestObjective: 0.2f}')
+        print("execution time", f'{300-timeLeft: 0.2f} sec')
         return 0
 
 
 # calls optimize function
+# todo call optimizer in separate file
 class main:
     tsp = r0680462()
-    tsp.optimize("tour194.csv")
+    tsp.optimize("tour29.csv")
