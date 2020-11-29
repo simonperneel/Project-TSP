@@ -27,19 +27,41 @@ class r0680462:
     def __init__(self):
         self.reporter = Reporter.Reporter(self.__class__.__name__)
 
+    # calculate cost of a tour
     def cost(self, ind, distanceMatrix):
-        # calculate cost
         tour = ind.tour
         cost = distanceMatrix[tour[0]][tour[len(tour)-1]]  # cost between first and last city to make circle complete
         for i in range(len(tour) - 1):
             cost += distanceMatrix[tour[i]][tour[i+1]]
         return cost
 
+    # amounts of swaps (not minimum) that tours are away from each other, used as 'distance' between individuals
+    def distance(self, ind1, ind2):
+        swaps = 0
+        tour1 = ind1.tour.tolist()
+        tour2 = ind2.tour.tolist()
+        for i in range(len(tour1)):
+            if tour1[i] != tour2[i]:
+                swaps += 1
+                element = tour1[i]
+                index = tour1.index(tour2[i])  # find index of correct element
+                tour1[index] = element  # swap
+                tour1[i] = tour2[i]
+        return swaps
+
+    def closestIndividual(self, ind, population):
+        closest_dist = math.inf
+        closest = None
+        for individual in population:
+            distance = self.distance(ind, individual)
+            if (individual is not ind) & (distance < closest_dist): # todo handle if same distance
+                closest = individual
+        return closest
+
     def init(self, params, nlen):
         population = []
         for i in range(params.popsize):
-            tour = np.arange(nlen)
-            np.random.shuffle(tour)
+            tour = np.random.permutation(nlen)
             ind = Individual(tour)
             population.append(ind)
         return population
@@ -179,7 +201,7 @@ class r0680462:
 
             # elimination
             population = self.elimination(population, params)
-            #self.print_population(population)
+            # self.print_population(population)
             # calculate best individual and mean objective value
             meanObjective, best_ind = self.calculate_metrics(population, distanceMatrix)
             bestObjective = self.cost(best_ind, distanceMatrix)
@@ -219,4 +241,4 @@ class r0680462:
 # todo call optimizer in separate file
 class main:
     tsp = r0680462()
-    tsp.optimize("tour100.csv")
+    tsp.optimize("tour29.csv")
