@@ -193,7 +193,7 @@ class r0680462:
                 parent2 = self.selection(params, population)
                 # ordered crossover to generate offspring
                 self.ordered_crossover(parent1, parent2, offspring, nlen)  # create child
-                #self.ordered_crossover(parent2, parent1, offspring, nlen)  # second child
+                self.ordered_crossover(parent2, parent1, offspring, nlen)  # second child
 
             # swap mutation on the offspring
             for i in range(len(offspring)):
