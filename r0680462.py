@@ -186,10 +186,19 @@ class r0680462:
             for i in range(math.ceil(params.amountOfOffspring/2)):
                 parent1 = self.selection(params, population)
                 parent2 = self.selection(params, population)
+<<<<<<< Updated upstream
                 # ordered crossover for offspring
                 offspring.append(self.ordered_crossover(parent1, parent2, nlen))  # first child
                 offspring.append(self.ordered_crossover(parent2, parent1, nlen))  # second child
                 # swap mutation on the offspring
+=======
+                # ordered crossover to generate offspring
+                self.ordered_crossover(parent1, parent2, offspring, nlen)  # create child
+                self.ordered_crossover(parent2, parent1, offspring, nlen)  # second child
+
+            # swap mutation on the offspring
+            for i in range(len(offspring)):
+>>>>>>> Stashed changes
                 self.swap_mutation(offspring[i], nlen)
 
             # mutation seed population
