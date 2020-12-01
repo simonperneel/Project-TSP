@@ -12,13 +12,14 @@ class Individual:
     def __init__(self, tour):
         self.tour = tour
         self.alpha = 0.05  # probability of mutation
+        self.prc = 0.99  # probability of recombination
 
 class Params:
 
     # set start parameters
     def __init__(self, distanceMatrix):
         self.popsize = 250  # population size
-        self.amountOfOffspring = 100  # amount individuals in the offspring
+        self.amountOfOffspring = 100  # amount of trials to generate a child (see prc)
         self.k = 5  # for k-tournament selection
         self.distanceMatrix = distanceMatrix  # matrix with the cost between cities
 
@@ -108,32 +109,36 @@ class r0680462:
         return population[:params.popsize]
 
     # crossover function
-    def ordered_crossover(self, p1, p2, nlen):
-        # start index for subset that will be transferred to the child
-        i1 = random.randint(0, nlen - 2)
-        i2 = random.randint(i1 + 1, nlen - 1)  # end index of subset
+    def ordered_crossover(self, p1, p2, offspring, nlen):
+        if random.random() < p1.prc:  # prc % chance of recombination
+            # start index for subset that will be transferred to the child
+            i1 = random.randint(0, nlen - 2)
+            i2 = random.randint(i1 + 1, nlen - 1)  # end index of subset
 
-        child_tour = np.full(nlen, -1, dtype=int)
-        for i in range(i1, i2):  # copy subset of p1 to child
-            child_tour[i] = p1.tour[i]
+            child_tour = np.full(nlen, -1, dtype=int)
+            for i in range(i1, i2):  # copy subset of p1 to child
+                child_tour[i] = p1.tour[i]
 
-        # delete values that are already in child from p2
-        p2_tour = p2.tour
-        values_to_delete = p1.tour[i1:i2]  # values to delete from p2
-        for i in range(len(values_to_delete)):
-            # removes element values_to_delete[i] from p2
-            p2_tour = p2_tour[p2_tour != values_to_delete[i]]
+            # delete values that are already in child from p2
+            p2_tour = p2.tour
+            values_to_delete = p1.tour[i1:i2]  # values to delete from p2
+            for i in range(len(values_to_delete)):
+                # removes element values_to_delete[i] from p2
+                p2_tour = p2_tour[p2_tour != values_to_delete[i]]
 
-        # insert remaining values of p2 into child
-        j = 0
-        for i in range(len(child_tour)):
-            if (child_tour[i] == -1):  # empty spot
-                child_tour[i] = p2_tour[j]
-                j += 1
+            # insert remaining values of p2 into child
+            j = 0
+            for i in range(len(child_tour)):
+                if child_tour[i] == -1:  # empty spot
+                    child_tour[i] = p2_tour[j]
+                    j += 1
 
-        # create child
-        child = Individual(child_tour)
-        return child
+            # create child
+            child = Individual(child_tour)
+            # add child to offspring
+            offspring.append(child)
+        else:  # no recombination happened
+            pass
 
     def print_population(self, population):
         for ind in population:
@@ -183,16 +188,18 @@ class r0680462:
 
             # recombination
             offspring = list()
-            for i in range(math.ceil(params.amountOfOffspring/2)):
+            for i in range(params.amountOfOffspring):
                 parent1 = self.selection(params, population)
                 parent2 = self.selection(params, population)
-                # ordered crossover for offspring
-                offspring.append(self.ordered_crossover(parent1, parent2, nlen))  # first child
-                offspring.append(self.ordered_crossover(parent2, parent1, nlen))  # second child
-                # swap mutation on the offspring
+                # ordered crossover to generate offspring
+                self.ordered_crossover(parent1, parent2, offspring, nlen)  # create child
+                #self.ordered_crossover(parent2, parent1, offspring, nlen)  # second child
+
+            # swap mutation on the offspring
+            for i in range(len(offspring)):
                 self.swap_mutation(offspring[i], nlen)
 
-            # mutation seed population
+            # swap mutation seed population
             for i in range(params.popsize-1):
                 self.swap_mutation(population[i], nlen)
 
@@ -208,7 +215,7 @@ class r0680462:
             bestSolution = best_ind.tour
 
             itT = time.time() - start
-            print(it, ")", f'{itT: 0.3f} sec ',  "mean cost: ", f'{meanObjective:0.2f}', "Lowest/best cost: ",
+            print(it, ")", f'{itT*1000: 0.1f} ms ',  "mean cost: ", f'{meanObjective:0.2f}', "Lowest/best cost: ",
                   f'{bestObjective:0.2f}')
 
 
