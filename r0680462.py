@@ -28,7 +28,6 @@ class r0680462:
     def __init__(self):
         self.reporter = Reporter.Reporter(self.__class__.__name__)
 
-    # calculate cost of a tour
     def cost(self, ind, distanceMatrix):
         tour = ind.tour
         cost = distanceMatrix[tour[0]][tour[len(tour)-1]]  # cost between first and last city to make circle complete
@@ -37,7 +36,7 @@ class r0680462:
         return cost
 
     # amounts of swaps (not minimum) that tours are away from each other, used as 'distance' between individuals
-    def distance(self, ind1, ind2):
+    def swap_distance(self, ind1, ind2):
         swaps = 0
         tour1 = ind1.tour.tolist()
         tour2 = ind2.tour.tolist()
@@ -50,11 +49,18 @@ class r0680462:
                 tour1[i] = tour2[i]
         return swaps
 
+    def hamming_distance(self, ind1, ind2):
+        distance = 0
+        for i in range(len(ind1.tour)):
+            if ind1.tour[i] != ind2.tour[i]:
+                distance += 1
+        return distance
+
     def closestIndividual(self, ind, population):
         closest_dist = math.inf
         closest = None
         for individual in population:
-            distance = self.distance(ind, individual)
+            distance = self.hamming_distance(ind, individual)
             if (individual is not ind) & (distance < closest_dist): # todo handle if same distance
                 closest = individual
         return closest
@@ -67,6 +73,7 @@ class r0680462:
             population.append(ind)
         return population
 
+    """ k-tournament selection """
     def selection(self, params, population):
         inds = []
         for i in range(params.k):
@@ -74,8 +81,7 @@ class r0680462:
             inds.append(r)
         all_costs = []
         for i in range(params.k):
-            all_costs.append(
-                self.cost(population[inds[i]], params.distanceMatrix))
+            all_costs.append(self.cost(population[inds[i]], params.distanceMatrix))
         index = all_costs.index(min(all_costs))
         return population[inds[index]]
 
@@ -90,7 +96,7 @@ class r0680462:
             tour[i1], tour[i2] = tour[i2], tour[i1]
             individual.tour = tour
 
-    # randomly selects two cities and inserts one before the other
+    """ randomly selects two cities and inserts one before the other """
     def ordered_mutation(self, individual, nlen):
         if random.random() < individual.alpha:  # alpha % chance of mutation
             i1 = random.randint(0, nlen - 1)
@@ -103,12 +109,7 @@ class r0680462:
             tour = np.insert(tour, i2, tmp)
             individual.tour = tour
 
-    # only keep the best individuals in the population, eliminate others
-    def elimination(self, population, params):
-        population = sorted(population, key=lambda x: self.cost(x, params.distanceMatrix))
-        return population[:params.popsize]
-
-    # crossover function
+    """"" crossover function """
     def ordered_crossover(self, p1, p2, offspring, nlen):
         if random.random() < p1.prc:  # prc % chance of recombination
             # start index for subset that will be transferred to the child
@@ -137,14 +138,37 @@ class r0680462:
             child = Individual(child_tour)
             # add child to offspring
             offspring.append(child)
+
         else:  # no recombination happened
             pass
+
+    """ only keep the best individuals in the population, eliminate others """
+    def elimination(self, population, params):
+        population = sorted(population, key=lambda x: self.cost(x, params.distanceMatrix))
+        return population[:params.popsize]
+
+    """ promoted ind x → eliminate closest in seed population """
+    def crowding(self, individual, seed_pop, k):
+        # sample individuals
+        inds = []
+        for i in range(k):
+            r = random.randint(0, len(seed_pop) - 1)
+            inds.append(r)
+        all_distances = []
+        # calculate distances between sampled individuals and promoted individual
+        for i in range(k):
+            all_distances.append(self.hamming_distance(individual, seed_pop[inds[i]]))
+        index = all_distances.index(min(all_distances))
+        # remove closest individual from seed population
+        seed_pop.pop(index)
+
+        return seed_pop
 
     def print_population(self, population):
         for ind in population:
             print(ind.tour)
 
-    # Calculate metrics of the population
+    """ Calculate metrics of the population """
     def calculate_metrics(self, population, distanceMatrix):
         fitnesses = list()
 
@@ -159,7 +183,7 @@ class r0680462:
 
         return mean_objective, population[index_min_cost]
 
-    # The evolutionary algorithm's main loop
+    """ The evolutionary algorithm's main loop """
     def optimize(self, filename):
         # Read distance matrix from file
         file = open(filename)
@@ -188,19 +212,19 @@ class r0680462:
 
             # recombination
             offspring = list()
-            for i in range(params.amountOfOffspring):
+            for i in range(math.ceil(params.amountOfOffspring/2)):
                 parent1 = self.selection(params, population)
                 parent2 = self.selection(params, population)
                 # ordered crossover to generate offspring
                 self.ordered_crossover(parent1, parent2, offspring, nlen)  # create child
-                #self.ordered_crossover(parent2, parent1, offspring, nlen)  # second child
+                self.ordered_crossover(parent2, parent1, offspring, nlen)  # second child
 
             # swap mutation on the offspring
             for i in range(len(offspring)):
                 self.swap_mutation(offspring[i], nlen)
 
             # swap mutation seed population
-            for i in range(params.popsize-1):
+            for i in range(len(population)-1):
                 self.swap_mutation(population[i], nlen)
 
             # combine seed population with offspring into new population
@@ -218,14 +242,12 @@ class r0680462:
             print(it, ")", f'{itT*1000: 0.1f} ms ',  "mean cost: ", f'{meanObjective:0.2f}', "Lowest/best cost: ",
                   f'{bestObjective:0.2f}')
 
-
             if it % 30 == 0:  # check if there is improvement every x iterations
                 if last_best_cost < bestObjective + 50:
                     improvement = False
                     print("STOP by no improvement")
                 else:
                     last_best_cost = bestObjective
-
 
             # Call the reporter with:
             #  - the mean objective function value of the population
