@@ -3,7 +3,7 @@ import Reporter
 import numpy as np
 import random
 import statistics
-import sklearn.cluster as skl
+import scipy.stats as stats
 import math
 import time
 
@@ -13,15 +13,17 @@ class Individual:
         self.tour = tour
         self.alpha = 0.05  # probability of mutation
         self.prc = 0.99  # probability of recombination
+        self.pcw = 0.5   # probability of crowding
 
 class Params:
 
     # set start parameters
     def __init__(self, distanceMatrix):
         self.popsize = 250  # population size
-        self.amountOfOffspring = 100  # amount of trials to generate a child (see prc)
+        self.amountOfOffspring = 150  # amount of trials to generate a child (see prc)
         self.k = 5  # for k-tournament selection
         self.distanceMatrix = distanceMatrix  # matrix with the cost between cities
+        self.pheur = 0  # amount of the pop that is initialized with nn heuristic
 
 class r0680462:
 
@@ -34,6 +36,10 @@ class r0680462:
         for i in range(len(tour) - 1):
             cost += distanceMatrix[tour[i]][tour[i+1]]
         return cost
+
+    def distance(self, city1, city2, params):
+        distance = params.distanceMatrix[city1][city2]
+        return distance
 
     # amounts of swaps (not minimum) that tours are away from each other, used as 'distance' between individuals
     def swap_distance(self, ind1, ind2):
@@ -56,25 +62,61 @@ class r0680462:
                 distance += 1
         return distance
 
+    """ calculate kendall tau distance, a correlation measure for lists
+        Value close to 1: strong agreement, close to 0: strong disagreement """
+    def kendalltau_distance(self, ind1, ind2):
+        distance, pvalue = stats.kendalltau(ind1.tour, ind2.tour)
+        return distance
+
+    """ returns closest individual of a sample from the population to a given individual """
     def closestIndividual(self, ind, population):
-        closest_dist = math.inf
-        closest = None
-        for individual in population:
-            distance = self.hamming_distance(ind, individual)
-            if (individual is not ind) & (distance < closest_dist): # todo handle if same distance
-                closest = individual
-        return closest
+        all_distances = []
+        for i in range(len(population) - 1):
+            all_distances.append(self.hamming_distance(ind, population[i]))
+            index = all_distances.index(min(all_distances))
+        # closest to sampled individuals
+        #sampled_ind = []
+        #for i in range(int(len(population)-1)):  # sample individuals
+        #     sampled_ind.append(random.randint(0, len(population) - 1))  # fill list with indices of the sampled inds
+        #     all_distances.append(self.hamming_distance(ind, population[sampled_ind[i]]))
+        #   index = all_distances.index(min(all_distances))  # index of closest individual
+
+        return population[index], index
 
     def init(self, params, nlen):
         population = []
-        for i in range(params.popsize):
+        # random initialization
+        for i in range(int(params.popsize*(1-params.pheur))):
             tour = np.random.permutation(nlen)
             ind = Individual(tour)
             population.append(ind)
+        # initialize % of pop with heuristic good individuals
+        for i in range(int(params.popsize*params.pheur)):
+            ind = self.init_nn(params, nlen)
+            population.append(ind)
         return population
 
+    """ initializes an individual with nearest neighbour"""
+    def init_nn(self, params, nlen):
+        start = np.random.choice(range(nlen))  # random pick first city
+        cities = set(range(nlen))  # all cities
+        tour = [start]
+        unvisited = set(cities - {start})  # unvisited cities)
+        unvisited = list(unvisited)
+        while unvisited:
+            C = self.nn(tour[-1], unvisited, params)
+            tour.append(C)
+            unvisited.remove(C)
+        tour = np.array(tour)
+        ind = Individual(tour)
+        return ind
+
+    """ find the city that is nearest to city A """
+    def nearestneighbor(self, A, cities, params):
+        return min(cities, key=lambda c: self.distance(c,A, params))
+
     """ k-tournament selection """
-    def selection(self, params, population):
+    def selection(self, population, params):
         inds = []
         for i in range(params.k):
             r = random.randint(0, len(population) - 1)
@@ -83,7 +125,16 @@ class r0680462:
         for i in range(params.k):
             all_costs.append(self.cost(population[inds[i]], params.distanceMatrix))
         index = all_costs.index(min(all_costs))
-        return population[inds[index]]
+        return population[inds[index]], inds[index]
+
+    """ sample k individuals from population """
+    def sample(self, population, k):
+        inds = []
+        for i in range(k):
+            r = random.randint(0, len(population) - 1)
+            inds.append(population[r])
+        return
+
 
     def swap_mutation(self, individual, nlen):
         if random.random() < individual.alpha:
@@ -142,27 +193,38 @@ class r0680462:
         else:  # no recombination happened
             pass
 
-    """ only keep the best individuals in the population, eliminate others """
+    """ only keep the best idividuals in the population, eliminate others """
     def elimination(self, population, params):
         population = sorted(population, key=lambda x: self.cost(x, params.distanceMatrix))
         return population[:params.popsize]
 
-    """ promoted ind x → eliminate closest in seed population """
-    def crowding(self, individual, seed_pop, k):
-        # sample individuals
-        inds = []
-        for i in range(k):
-            r = random.randint(0, len(seed_pop) - 1)
-            inds.append(r)
-        all_distances = []
-        # calculate distances between sampled individuals and promoted individual
-        for i in range(k):
-            all_distances.append(self.hamming_distance(individual, seed_pop[inds[i]]))
-        index = all_distances.index(min(all_distances))
-        # remove closest individual from seed population
-        seed_pop.pop(index)
+    """ crowding with k-tournament promotion """
+    def crowding(self, population, params):
+        next_gen = []
+        # promote ind to next generation by k-tournament
+        for i in range(params.popsize):
+            promoted_ind, index = self.selection(population, params)
+            next_gen.append(promoted_ind)  # add to next generation
+            population.pop(index)
+            if random.random() < promoted_ind.pcw:  # probability of crowding close individual
+                closestInd, index = self.closestIndividual(promoted_ind, population)  # find closest individual from promoted one
+                population.pop(index)
 
-        return seed_pop
+        return next_gen
+
+    """ crowding with elitism promotion """
+    def crowding2(self, population, params):
+        next_gen = []
+        # promote ind to next generation by elitism
+        population = sorted(population, key=lambda x: self.cost(x, params.distanceMatrix))  # rank population based on fitness
+        for i in range(params.popsize):
+            promoted_ind = population[i]
+            next_gen.append(promoted_ind)  # copy to next generation
+            population.pop(i)  # remove promoted ind from population
+            if random.random() < population[i].pcw:
+                closestInd, index = self.closestIndividual(promoted_ind, population)
+                population.pop(index)
+        return next_gen
 
     def print_population(self, population):
         for ind in population:
@@ -197,24 +259,22 @@ class r0680462:
                     distanceMatrix[i][j] = 1000000
         file.close()
 
-        # initialize parameters:
-        params = Params(distanceMatrix)  # see class for the values
-        maxit = 10000
-
+        # initialize parameters and population:
+        params = Params(distanceMatrix)
         population = self.init(params, nlen)
         last_best_cost = math.inf
         improvement = True
 
         it = 0
-        while (it < maxit) & improvement:
+        while improvement:
             start = time.time()
             it += 1
 
             # recombination
             offspring = list()
             for i in range(math.ceil(params.amountOfOffspring/2)):
-                parent1 = self.selection(params, population)
-                parent2 = self.selection(params, population)
+                parent1, index = self.selection(population, params)
+                parent2, index = self.selection(population, params)
                 # ordered crossover to generate offspring
                 self.ordered_crossover(parent1, parent2, offspring, nlen)  # create child
                 self.ordered_crossover(parent2, parent1, offspring, nlen)  # second child
@@ -230,9 +290,12 @@ class r0680462:
             # combine seed population with offspring into new population
             population.extend(offspring)
 
-            # elimination
+            # elimination by crowding or elitism
+            #population = self.crowding(population, params)
             population = self.elimination(population, params)
-            # self.print_population(population)
+
+            # dynamic parameters
+
             # calculate best individual and mean objective value
             meanObjective, best_ind = self.calculate_metrics(population, distanceMatrix)
             bestObjective = self.cost(best_ind, distanceMatrix)
@@ -240,7 +303,7 @@ class r0680462:
 
             itT = time.time() - start
             print(it, ")", f'{itT*1000: 0.1f} ms ',  "mean cost: ", f'{meanObjective:0.2f}', "Lowest/best cost: ",
-                  f'{bestObjective:0.2f}')
+                  f'{bestObjective:0.2f}', "diff.: ", f'{meanObjective-bestObjective:0.2f}')
 
             if it % 30 == 0:  # check if there is improvement every x iterations
                 if last_best_cost < bestObjective + 50:
