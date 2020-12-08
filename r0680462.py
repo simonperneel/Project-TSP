@@ -11,7 +11,7 @@ import time
 class Individual:
     def __init__(self, tour):
         self.tour = tour
-        self.alpha = 0.05  # probability of mutation
+        self.alpha = 0.5  # probability of mutation
         self.prc = 0.99  # probability of recombination
         self.pcw = 0.5   # probability of crowding
 
@@ -23,7 +23,7 @@ class Params:
         self.amountOfOffspring = 150  # amount of trials to generate a child (see prc)
         self.k = 5  # for k-tournament selection
         self.distanceMatrix = distanceMatrix  # matrix with the cost between cities
-        self.pheur = 0  # amount of the pop that is initialized with nn heuristic
+        self.pheur = 0.5  # amount of the pop that is initialized with nn heuristic
 
 class r0680462:
 
@@ -104,7 +104,7 @@ class r0680462:
         unvisited = set(cities - {start})  # unvisited cities)
         unvisited = list(unvisited)
         while unvisited:
-            C = self.nn(tour[-1], unvisited, params)
+            C = self.nearestneighbor(tour[-1], unvisited, params)
             tour.append(C)
             unvisited.remove(C)
         tour = np.array(tour)
@@ -147,6 +147,19 @@ class r0680462:
             tour[i1], tour[i2] = tour[i2], tour[i1]
             individual.tour = tour
 
+    """ reverse sequence mutation reverses a random selected part of the tour"""
+    def rs_mutation(self, individual, nlen):
+        if random.random() < individual.alpha:
+            start = random.randint(0, nlen -1)
+            end = start
+            while start == end:
+                end = random.randint(0, nlen - 1)
+            if start > end:
+                start, end = end, start
+            tour = individual.tour
+            tour[start:end+1] = np.flip(tour[start:end+1])  # reverse part of tour
+
+
     """ randomly selects two cities and inserts one before the other """
     def ordered_mutation(self, individual, nlen):
         if random.random() < individual.alpha:  # alpha % chance of mutation
@@ -164,8 +177,12 @@ class r0680462:
     def ordered_crossover(self, p1, p2, offspring, nlen):
         if random.random() < p1.prc:  # prc % chance of recombination
             # start index for subset that will be transferred to the child
-            i1 = random.randint(0, nlen - 2)
-            i2 = random.randint(i1 + 1, nlen - 1)  # end index of subset
+            i1 = random.randint(0, nlen - 1)
+            i2 = i1
+            while i1 == i2:
+                i2 = random.randint(0, nlen - 1)  # end index of subset
+            if i1 > i2:
+                i1, i2 = i2, i1  # start index < end index
 
             child_tour = np.full(nlen, -1, dtype=int)
             for i in range(i1, i2):  # copy subset of p1 to child
@@ -279,22 +296,22 @@ class r0680462:
                 self.ordered_crossover(parent1, parent2, offspring, nlen)  # create child
                 self.ordered_crossover(parent2, parent1, offspring, nlen)  # second child
 
-            # swap mutation on the offspring
+            # mutation on the offspring
             for i in range(len(offspring)):
-                self.swap_mutation(offspring[i], nlen)
+                self.rs_mutation(offspring[i], nlen)
 
-            # swap mutation seed population
+            # mutation seed population
             for i in range(len(population)-1):
-                self.swap_mutation(population[i], nlen)
+                self.rs_mutation(population[i], nlen)
 
             # combine seed population with offspring into new population
             population.extend(offspring)
 
             # elimination by crowding or elitism
             #population = self.crowding(population, params)
-            population = self.elimination(population, params)
+            population = self.elimination(population, params)  # (l+µ) elimination
+            #population = self.elimination(offspring, params) # (l,µ) elimination
 
-            # dynamic parameters
 
             # calculate best individual and mean objective value
             meanObjective, best_ind = self.calculate_metrics(population, distanceMatrix)
@@ -303,10 +320,10 @@ class r0680462:
 
             itT = time.time() - start
             print(it, ")", f'{itT*1000: 0.1f} ms ',  "mean cost: ", f'{meanObjective:0.2f}', "Lowest/best cost: ",
-                  f'{bestObjective:0.2f}', "diff.: ", f'{meanObjective-bestObjective:0.2f}')
+                  f'{bestObjective:0.2f}', "div.: ", f'{meanObjective-bestObjective:0.2f}')
 
             if it % 30 == 0:  # check if there is improvement every x iterations
-                if last_best_cost < bestObjective + 50:
+                if last_best_cost < bestObjective + 10:
                     improvement = False
                     print("STOP by no improvement")
                 else:
@@ -333,4 +350,4 @@ class r0680462:
 # todo call optimizer in separate file
 class main:
     tsp = r0680462()
-    tsp.optimize("tour29.csv")
+    tsp.optimize("tour194.csv")
