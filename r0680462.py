@@ -23,7 +23,7 @@ class Params:
         self.amountOfOffspring = 150  # amount of trials to generate a child (see prc)
         self.k = 5  # for k-tournament selection
         self.distanceMatrix = distanceMatrix  # matrix with the cost between cities
-        self.pheur = 0.5  # amount of the pop that is initialized with nn heuristic
+        self.pheur = 0.5  # percentage of the pop that is initialized with nearest neighbour heuristic
 
 class r0680462:
 
@@ -135,30 +135,22 @@ class r0680462:
             inds.append(population[r])
         return
 
+    """ random pick one of the 4 mutation operators"""
+    def mutation(self, individual, nlen):
+        mutations = [self.swap_mutation, self.insert_mutation,
+                     self.rs_mutation, self.scramble_mutation]
+        random.choice(mutations)(individual, nlen)
 
     def swap_mutation(self, individual, nlen):
         if random.random() < individual.alpha:
             i1 = random.randint(0, nlen - 1)
             i2 = i1
-            while (i1 == i2):
+            while i1 == i2:
                 i2 = random.randint(0, nlen - 1)
 
             tour = individual.tour
             tour[i1], tour[i2] = tour[i2], tour[i1]
             individual.tour = tour
-
-    """ reverse sequence mutation reverses a random selected part of the tour"""
-    def rs_mutation(self, individual, nlen):
-        if random.random() < individual.alpha:
-            start = random.randint(0, nlen -1)
-            end = start
-            while start == end:
-                end = random.randint(0, nlen - 1)
-            if start > end:
-                start, end = end, start
-            tour = individual.tour
-            tour[start:end+1] = np.flip(tour[start:end+1])  # reverse part of tour
-
 
     """ randomly selects two cities and inserts one before the other """
     def ordered_mutation(self, individual, nlen):
@@ -171,6 +163,59 @@ class r0680462:
             tmp = tour[i1]
             tour = np.delete(tour, i1)
             tour = np.insert(tour, i2, tmp)
+            individual.tour = tour
+
+    """ reverses a random selected part of the tour"""
+    def rs_mutation(self, individual, nlen):
+        if random.random() < individual.alpha:
+            start = random.randint(0, nlen - 1)
+            end = start
+            while start == end:
+                end = random.randint(0, nlen - 1)
+            if start > end:
+                start, end = end, start
+            tour = individual.tour
+            tour[start:end+1] = np.flip(tour[start:end+1])  # reverse part of tour
+
+    def insert_mutation(self, individual, nlen):
+        if random.random() < individual.alpha:
+            i1 = random.randint(0, nlen - 2)
+            i2 = i1
+            while i1 == i2:
+                i2 = random.randint(0, nlen - 1)
+            if i1 > i2:
+                i1, i2 = i2, i1
+            tour = individual.tour
+            tour = np.insert(tour, i1+1, tour[i2])  # insert value at i2 next to i1
+            tour = np.delete(tour, i2+1)
+            individual.tour = tour
+
+    """ randomly selects two cities and inserts one before the other """
+    def ordered_mutation(self, individual, nlen):
+        if random.random() < individual.alpha:  # alpha % chance of mutation
+            i1 = random.randint(0, nlen - 1)
+            i2 = i1
+            while i1 == i2:
+                i2 = random.randint(0, nlen - 1)
+            tour = individual.tour
+            tmp = tour[i1]
+            tour = np.delete(tour, i1)
+            tour = np.insert(tour, i2, tmp)
+            individual.tour = tour
+
+    """ random part of the tour have their positions scrambled"""
+    def scramble_mutation(self, individual, nlen):
+        if random.random() < individual.alpha:
+            i1 = random.randint(0, nlen - 1)
+            i2 = i1
+            while i1 == i2:
+                i2 = random.randint(0, nlen - 1)
+            if i1 > i2:
+                i1, i2 = i2, i1
+            tour = individual.tour
+            subtour = tour[i1:i2]
+            random.shuffle(subtour)
+            tour[i1:i2] = subtour
             individual.tour = tour
 
     """"" crossover function """
@@ -298,11 +343,11 @@ class r0680462:
 
             # mutation on the offspring
             for i in range(len(offspring)):
-                self.rs_mutation(offspring[i], nlen)
+                self.mutation(offspring[i], nlen)
 
             # mutation seed population
             for i in range(len(population)-1):
-                self.rs_mutation(population[i], nlen)
+                self.mutation(population[i], nlen)
 
             # combine seed population with offspring into new population
             population.extend(offspring)
@@ -322,8 +367,8 @@ class r0680462:
             print(it, ")", f'{itT*1000: 0.1f} ms ',  "mean cost: ", f'{meanObjective:0.2f}', "Lowest/best cost: ",
                   f'{bestObjective:0.2f}', "div.: ", f'{meanObjective-bestObjective:0.2f}')
 
-            if it % 30 == 0:  # check if there is improvement every x iterations
-                if last_best_cost < bestObjective + 10:
+            if it % 50 == 0:  # check if there is improvement every x iterations
+                if last_best_cost <= bestObjective:
                     improvement = False
                     print("STOP by no improvement")
                 else:
