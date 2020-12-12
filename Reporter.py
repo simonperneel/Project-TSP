@@ -9,6 +9,7 @@ class Reporter:
 		self.numIterations = 0
 		self.filename = filename + ".csv"
 		self.delimiter = ','
+		self.delimiter2 = '.'
 		self.startTime = time.perf_counter()
 		self.writingTime = 0
 		outFile = open(self.filename, "w")
@@ -30,7 +31,7 @@ class Reporter:
 			outFile.write(str(meanObjective) + self.delimiter)
 			outFile.write(str(bestObjective) + self.delimiter)
 			for i in range(bestSolution.size):
-				outFile.write(str(bestSolution[i]) + self.delimiter)
+				outFile.write(str(bestSolution[i]) + self.delimiter2)
 			outFile.write('\n')
 			outFile.close()
 
