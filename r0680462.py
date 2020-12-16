@@ -1,4 +1,3 @@
-from numpy.core.fromnumeric import mean
 import Reporter
 import numpy as np
 import random
@@ -10,31 +9,34 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
-class Individual:
-    def __init__(self, tour):
-        self.tour = tour
-        self.alpha = 0.5        # probability of mutation
-        self.prc = 0.99         # probability of recombination
-        self.pcw = 0.25         # probability of crowding
-        self.cost = 0           # cost of a tour
-        self.uptodate = False   # flag if cost of a tour is still up-to-date
-
 class Params:
 
     # set start parameters
-    def __init__(self, distanceMatrix):
-        self.popsize = 250  # population size
-        self.amountOfOffspring = 150  # amount of trials to generate a child (see prc)
-        self.k = 5  # for k-tournament selection
-        self.distanceMatrix = distanceMatrix  # matrix with the cost between cities
-        self.pheur = 0.5  # percentage of the pop that is initialized with nearest neighbour heuristic
+    def __init__(self, dM):
+        self.popsize = 250              # population size
+        self.amountOfOffspring = 150    # amount of trials to generate a child (see prc)
+        self.k = 5                      # for k-tournament selection
+        self.distanceMatrix = dM        # matrix with the cost between cities
+        self.pheur = 0.3                # % of the pop that is initialized with nearest neighbour heuristic
+        self.alpha = 0.3                # probability of mutation
+
+
+class Individual:
+    def __init__(self, tour):
+        self.tour = tour        # tour of cities
+        self.prc = 0.99         # probability of recombination
+        self.pcw = 0.2          # probability of crowding
+        self.cost = 0           # init value
+        self.uptodate = False   # flag if cost of a tour is still up-to-date
 
 
 class r0680462:
 
+    """ initializes the reporter and starts the counter """
     def __init__(self):
         self.reporter = Reporter.Reporter(self.__class__.__name__)
 
+    """ calculate the cost of a tour, used as fitness function """
     def cost(self, ind, distanceMatrix):
         tour = ind.tour
         if ind.uptodate:  # no recalculation needed
@@ -47,11 +49,13 @@ class r0680462:
             ind.uptodate = True  # cost is up-to-date
         return cost
 
+    """ calculate the distance between two cities """
     def distance(self, city1, city2, params):
         distance = params.distanceMatrix[city1][city2]
         return distance
 
-    """ amounts of swaps (not minimum) that tours are away from each other, 'distance' """
+    """ calculate the amount of swaps (not minimum) that tours are away from each other, used
+        as distance between two tours """
     def swap_distance(self, ind1, ind2):
         swaps = 0
         tour1 = ind1.tour.tolist()
@@ -65,6 +69,7 @@ class r0680462:
                 tour1[i] = tour2[i]
         return swaps
 
+    """ calculate the amount of different cities between two tours """
     def hamming_distance(self, ind1, ind2):
         distance = 0
         for i in range(len(ind1.tour)):
@@ -78,21 +83,47 @@ class r0680462:
         distance, pvalue = stats.kendalltau(ind1.tour, ind2.tour)
         return distance
 
-    """ returns closest individual of a sample from the population to a given individual """
+    """ calculate amount of shared edges between an individuals tour and
+        returns the amount of different edges as distance"""
+    def different_edges_distance(self, ind1, ind2):
+        tour1 = ind1.tour
+        tour2 = ind2.tour
+        length = len(tour1)
+
+        # save all edges of first tour
+        edge = tour1[0], tour1[-1]
+        edges1 = {edge}
+        for i in range(1, len(tour1)):
+            edge = tour1[i], tour1[i-1]
+            edges1.add(edge)
+
+        # same for second tour
+        edge = tour2[0], tour2[-1]
+        edges2 = {edge}
+        for i in range(1, len(tour1)):
+            edge = tour2[i], tour2[i-1]
+            edges2.add(edge)
+
+        return length - len(edges1.intersection(edges2))  # return amount of different edges
+
+    """ returns closest individual of a sample/all individuals from the population to a given individual """
     def closestIndividual(self, ind, population):
         all_distances = []
-        for i in range(len(population) - 1):
-            all_distances.append(self.hamming_distance(ind, population[i]))
-            index = all_distances.index(min(all_distances))
+        #print("pop length", len(population))
+        #for i in range(len(population)):
+         #   all_distances.append(self.different_edges_distance(ind, population[i]))
+        #index = all_distances.index(min(all_distances))
+        #print(index)
         # closest to sampled individuals
-        #sampled_ind = []
-        #for i in range(int(len(population)-1)):  # sample individuals
-        #     sampled_ind.append(random.randint(0, len(population) - 1))  # fill list with indices of the sampled inds
-        #     all_distances.append(self.hamming_distance(ind, population[sampled_ind[i]]))
-        #   index = all_distances.index(min(all_distances))  # index of closest individual
+        inds = []
+        for i in range(5):  # sample 5 individuals
+            inds.append(random.randint(0, len(population) - 1))  # fill list with indices of the sampled inds
+            all_distances.append(self.different_edges_distance(ind, population[inds[i]]))  # calculate distances
+        index = all_distances.index(min(all_distances))  # index of closest individual
+        #print("index", index)
+        return population[inds[index]], inds[index]
 
-        return population[index], index
-
+    """ initializes the population with a % of heuristic individuals """
     def init(self, params, nlen):
         population = []
         # random initialization
@@ -102,11 +133,12 @@ class r0680462:
             population.append(ind)
         # initialize % of pop with heuristic good individuals
         for i in range(int(params.popsize*params.pheur)):
-            ind = self.init_nn(params, nlen)
+            tour = self.init_nn(params, nlen)
+            ind = Individual(tour)
             population.append(ind)
         return population
 
-    """ initializes an individual with nearest neighbour"""
+    """ initializes a tour with nearest neighbours heuristic """
     def init_nn(self, params, nlen):
         start = np.random.choice(range(nlen))  # random pick first city
         cities = set(range(nlen))  # all cities
@@ -118,12 +150,11 @@ class r0680462:
             tour.append(C)
             unvisited.remove(C)
         tour = np.array(tour)
-        ind = Individual(tour)
-        return ind
+        return tour
 
     """ find the city that is nearest to city A """
     def nearestneighbor(self, A, cities, params):
-        return min(cities, key=lambda c: self.distance(c,A, params))
+        return min(cities, key=lambda c: self.distance(c, A, params))
 
     """ k-tournament selection """
     def selection(self, population, params):
@@ -137,49 +168,29 @@ class r0680462:
         index = all_costs.index(min(all_costs))
         return population[inds[index]], inds[index]
 
-    """ sample k individuals from population """
-    def sample(self, population, k):
-        inds = []
-        for i in range(k):
-            r = random.randint(0, len(population) - 1)
-            inds.append(population[r])
-        return
-
     """ picks one of the 4 mutation operators (weighted) """
-    def mutation(self, individual, nlen):
-        mutations = [self.swap_mutation, self.insert_mutation,
-                     self.rs_mutation, self.rs_mutation, self.scramble_mutation]
-        random.choice(mutations)(individual, nlen)
+    def mutation(self, individual, nlen, params):
+        mutations = [self.swap_mutation,
+                     self.insert_mutation,
+                     self.rs_mutation, self.rs_mutation, self.rs_mutation, self.rs_mutation,
+                     self.scramble_mutation, self.scramble_mutation]
+        random.choice(mutations)(individual, nlen, params)
 
-    def swap_mutation(self, individual, nlen):
-        if random.random() < individual.alpha:
-            individual.uptodate = False  # cost of the tour will change
+    """ randomly swaps two cities of a tour """
+    def swap_mutation(self, individual, nlen, params):
+        if random.random() < params.alpha:
+            individual.uptodate = False  # cost of the tour has changed
             i1 = random.randint(0, nlen - 1)
             i2 = i1
             while i1 == i2:
                 i2 = random.randint(0, nlen - 1)
-
             tour = individual.tour
             tour[i1], tour[i2] = tour[i2], tour[i1]
             individual.tour = tour
 
-    """ randomly selects two cities and inserts one before the other """
-    def ordered_mutation(self, individual, nlen):
-        if random.random() < individual.alpha:  # alpha % chance of mutation
-            individual.uptodate = False
-            i1 = random.randint(0, nlen - 1)
-            i2 = i1
-            while i1 == i2:
-                i2 = random.randint(0, nlen - 1)
-            tour = individual.tour
-            tmp = tour[i1]
-            tour = np.delete(tour, i1)
-            tour = np.insert(tour, i2, tmp)
-            individual.tour = tour
-
     """ reverses a random selected part of the tour"""
-    def rs_mutation(self, individual, nlen):
-        if random.random() < individual.alpha:
+    def rs_mutation(self, individual, nlen, params):
+        if random.random() < params.alpha:
             individual.uptodate = False
             start = random.randint(0, nlen - 1)
             end = start
@@ -190,8 +201,9 @@ class r0680462:
             tour = individual.tour
             tour[start:end+1] = np.flip(tour[start:end+1])  # reverse part of tour
 
-    def insert_mutation(self, individual, nlen):
-        if random.random() < individual.alpha:
+    """ inserts a random picked city next to an other one """
+    def insert_mutation(self, individual, nlen, params):
+        if random.random() < params.alpha:
             individual.uptodate = False
             i1 = random.randint(0, nlen - 2)
             i2 = i1
@@ -204,22 +216,9 @@ class r0680462:
             tour = np.delete(tour, i2+1)
             individual.tour = tour
 
-    """ randomly selects two cities and inserts one before the other """
-    def ordered_mutation(self, individual, nlen):
-        if random.random() < individual.alpha:  # alpha % chance of mutation
-            i1 = random.randint(0, nlen - 1)
-            i2 = i1
-            while i1 == i2:
-                i2 = random.randint(0, nlen - 1)
-            tour = individual.tour
-            tmp = tour[i1]
-            tour = np.delete(tour, i1)
-            tour = np.insert(tour, i2, tmp)
-            individual.tour = tour
-
     """ random part of the tour have their positions scrambled"""
-    def scramble_mutation(self, individual, nlen):
-        if random.random() < individual.alpha:
+    def scramble_mutation(self, individual, nlen, params):
+        if random.random() < params.alpha:
             i1 = random.randint(0, nlen - 1)
             i2 = i1
             while i1 == i2:
@@ -234,11 +233,12 @@ class r0680462:
 
     """ picks one of the crossover operators (weighted) """
     def crossover(self, p1, p2, offspring, nlen, params):
-        crossovers = [self.order_crossover, self.order_crossover, self.dpx_crossover]
+        crossovers = [self.order_crossover, self.order_crossover, self.order_crossover, self.order_crossover,
+                      self.dpx_crossover]
         random.choice(crossovers)(p1, p2, offspring, nlen, params)
 
     """ order crossover """
-    def order_crossover(self, p1, p2, offspring, nlen, params):
+    def order_crossover(self, p1, p2, offspring, nlen, params=None):
         if random.random() < p1.prc:  # prc % chance of recombination
             # start index for subset that will be transferred to the child
             i1 = random.randint(0, nlen - 1)
@@ -275,7 +275,7 @@ class r0680462:
             pass
 
     """ cycle crossover """
-    def cycle_crossover(self, p1, p2, offspring, nlen, params):
+    def cycle_crossover(self, p1, p2, offspring, nlen, params=None):
         if random.random() < p1.prc:
             p1_tour = p1.tour.tolist()
             p2_tour = p2.tour.tolist()
@@ -333,6 +333,7 @@ class r0680462:
         else:
             pass  # no recombination happened
 
+    """ distance preserving crossover"""
     def dpx_crossover(self, p1, p2, offspring, nlen, params):
         tour1 = p1.tour
         tour2 = p2.tour
@@ -351,14 +352,14 @@ class r0680462:
 
         # same for p2
         graph_p2 = {tour2[0]: [tour2[1], tour2[length]]}  # edges of the first node
-        for i in range(1,length):
+        for i in range(1, length):
             graph_p2[tour2[i]] = [tour2[i+1], tour2[i-1]]
         graph_p2[tour2[length]] = [tour2[0], tour2[length-1]]
 
         # create graph with mutual edges of the parents
         child_graph = {}
         for i in range(length+1):
-            child_graph[i] = [x for x in graph_p1[i] if x  in graph_p2[i]]
+            child_graph[i] = [x for x in graph_p1[i] if x in graph_p2[i]]
 
         single_edge_nodes = list()
         zero_or_single_edge_nodes = list()
@@ -417,7 +418,7 @@ class r0680462:
         child = Individual(child_tour)
         offspring.append(child)
 
-    """ only keep the best idividuals in the population, eliminate others """
+    """ only keep the best individuals in the population, eliminate others """
     def elimination(self, population, params):
         population = sorted(population, key=lambda x: self.cost(x, params.distanceMatrix))
         return population[:params.popsize]
@@ -429,14 +430,15 @@ class r0680462:
         for i in range(params.popsize):
             promoted_ind, index = self.selection(population, params)
             next_gen.append(promoted_ind)  # add to next generation
-            population.pop(index)
+            population.pop(index)  # remove from seed population
             if random.random() < promoted_ind.pcw:  # probability of crowding close individual
                 closestInd, index = self.closestIndividual(promoted_ind, population)  # find closest individual from promoted one
                 population.pop(index)
 
         return next_gen
 
-    """ crowding with elitism promotion """
+    """ crowding with elitism promotion, crowding only starts after 30 iterations
+        ( to ban the tours with unconnected cities first) """
     def crowding2(self, population, params):
         next_gen = []
         # promote ind to next generation by elitism
@@ -444,15 +446,11 @@ class r0680462:
         for i in range(params.popsize):
             promoted_ind = population[i]
             next_gen.append(promoted_ind)  # copy to next generation
-            population.pop(i)  # remove promoted ind from population
-            if random.random() < population[i].pcw:
-                closestInd, index = self.closestIndividual(promoted_ind, population)
+            #population.pop(i)  # remove promoted ind from population, not needed here
+            if random.random() < promoted_ind.pcw:
+                closestInd, index = self.closestIndividual(promoted_ind, population[i:len(population)])
                 population.pop(index)
         return next_gen
-
-    def print_population(self, population):
-        for ind in population:
-            print(ind.tour)
 
     """ Calculate metrics of the population """
     def calculate_metrics(self, population, distanceMatrix):
@@ -469,7 +467,7 @@ class r0680462:
 
         return mean_objective, population[index_min_cost]
 
-    """ plot convergence graph """
+    """ plots a convergence graph """
     def plot(self, filename):
         plt.figure(1)
         plt.autoscale()
@@ -479,20 +477,20 @@ class r0680462:
         data.plot(x='# Iteration', y=' Best value', kind='line', label='best value', c='firebrick', linewidth=2, ax=ax)
         plt.show()
 
-
     """ The evolutionary algorithm's main loop """
     def optimize(self, filename):
         # Read distance matrix from file
         file = open(filename)
         distanceMatrix = np.loadtxt(file, delimiter=",")
+        file.close()
         nlen = distanceMatrix.shape[0]
 
         # ban unconnected cities from population by setting their cost extremely high
-        for i in range(nlen-1):
-            for j in range(nlen-1):
+        for i in range(nlen):
+            for j in range(nlen):
                 if distanceMatrix[i][j] == math.inf:
-                    distanceMatrix[i][j] = 1000000
-        file.close()
+                    distanceMatrix[i][j] = 999999
+
 
         # initialize parameters and population:
         params = Params(distanceMatrix)
@@ -511,27 +509,28 @@ class r0680462:
                 parent1, index = self.selection(population, params)
                 parent2, index = self.selection(population, params)
                 # order crossover, cycle crossover or dpx crossover to generate offspring
-                self.order_crossover(parent1, parent2, offspring, nlen, params)  # create child
-                self.order_crossover(parent2, parent1, offspring, nlen, params)  # create second child
+                #self.order_crossover(parent1, parent2, offspring, nlen)  # create child
+                #self.order_crossover(parent2, parent1, offspring, nlen)  # create second child
                 #self.dpx_crossover(parent1, parent2, offspring, nlen, params)
                 #self.dpx_crossover(parent2, parent1, offspring, nlen, params)
                 #self.cycle_crossover(parent1, parent2, offspring, nlen, params)
-                #self.crossover(parent1, parent2, offspring, nlen, params)  # picks random one of the crossover operators
-                #self.crossover(parent2, parent1, offspring, nlen, params)
+                self.crossover(parent1, parent2, offspring, nlen, params)  # picks random one of the crossover operators (weighted)
+                self.crossover(parent2, parent1, offspring, nlen, params)
 
             # mutation on the offspring
-            for i in range(len(offspring)):
-                self.mutation(offspring[i], nlen)
+            for i in range(0, len(offspring)):  # 0/1 to (not) mutate best individual from offspring
+                self.mutation(offspring[i], nlen, params)
 
             # mutation seed population
-            for i in range(1, (len(population)-1)):  # 0/1 to (not) mutate best individual
-                self.mutation(population[i], nlen)
+            for i in range(3, (len(population)-1)):  # 3 to not mutate the best three individual of the population
+                self.mutation(population[i], nlen, params)
+
 
             # combine seed population with offspring into new population
             population.extend(offspring)
 
             # elimination by crowding or elitism
-            #population = self.crowding(population, params)
+            #population = self.crowding2(population, params)
             population = self.elimination(population, params)  # (l+µ) elimination
             #population = self.elimination(offspring, params)  # (l,µ) elimination
 
@@ -541,21 +540,28 @@ class r0680462:
             bestObjective = self.cost(best_ind, distanceMatrix)
             bestSolution = best_ind.tour
 
-            # dynamic parameters, don't improve the solution much
-           # for ind in population:
-           #     ind.alpha = (1-((meanObjective-bestObjective)/bestObjective))**0.4
-            #print("alpha ", population[0].alpha)
+            # alpha value based on ranking in population, from 0.35 → 0.6
+            #for i in range(params.popsize):
+                    #   population[i].alpha = 0.25 / params.popsize * i + 0.35
+            #    ind.alpha = 0.7 / (1 + math.exp(-0.1 * (it - 0.35)))  # logistic function _/¯
+            #print("alpha ", population[params.popsize-1].alpha)
+
+            if it % 50 == 0:
+                params.alpha = 0.00025 * it + 0.3
+            print(params.alpha)
+
 
             itT = time.time() - start
             print(it, ")", f'{itT*1000: 0.1f} ms ',  "mean cost: ", f'{meanObjective:0.2f}', "Lowest/best cost: ",
                   f'{bestObjective:0.2f}', "div.: ", f'{meanObjective-bestObjective:0.2f}')
 
-            #if it % 50 == 0:  # check if there is improvement every x iterations
-             #   if last_best_cost <= bestObjective:
-              #      improvement = False
-               #     print("STOP by no improvement")
-              #  else:
-               #     last_best_cost = bestObjective
+            # stop criterion
+            if it % 100 == 0:  # check if there is improvement every x iterations
+                if last_best_cost <= bestObjective:
+                    improvement = False
+                    print("STOP by no improvement")
+                else:
+                    last_best_cost = bestObjective
 
             # Call the reporter with:
             #  - the mean objective function value of the population
@@ -570,12 +576,40 @@ class r0680462:
         print("best tour", best_ind.tour)
         print("cost best tour", f'{bestObjective: 0.2f}')
         print("execution time", f'{300-timeLeft: 0.2f} sec')
-        return 0
+
+        return meanObjective, bestObjective
 
 
 # calls optimize function
 # todo call optimizer in separate file
 class main:
     tsp = r0680462()
-    tsp.optimize("tour929.csv")
+    tsp.optimize("tour194.csv")
     tsp.plot("r0680462.csv")
+
+"""
+    mean = []
+    best = []
+    for i in range(2):
+        tsp = r0680462()
+        meanobj, bestobj = tsp.optimize("tour29.csv")
+        mean.append(meanobj)
+        best.append(bestobj)
+
+    avg_best = statistics.mean(best)
+    std_best = statistics.stdev(best)
+    avg_mean = statistics.mean(mean)
+    std_mean = statistics.stdev(mean)
+
+    plt.hist(best)
+    plt.xlabel('Cost')
+    plt.ylabel('Frequency')
+    plt.title('Variation on best individual')
+    plt.figure()
+    plt.hist(mean)
+    plt.xlabel('Cost')
+    plt.ylabel('Frequency')
+    plt.title('Variation on mean population')
+    plt.show()
+    tsp.plot("r0680462.csv")  # todo remove when finalizing code
+"""
