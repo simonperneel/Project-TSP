@@ -1,10 +1,13 @@
 <component name="ProjectDictionaryState">
   <dictionary name="simon">
     <words>
+      <w>edgeset</w>
       <w>fitnesses</w>
       <w>inds</w>
       <w>nearestneighbor</w>
       <w>nlen</w>
+      <w>pheur</w>
+      <w>popsize</w>
       <w>stdev</w>
       <w>uptodate</w>
     </words>

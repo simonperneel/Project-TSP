@@ -8,6 +8,8 @@ import time
 import matplotlib.pyplot as plt
 import pandas as pd
 
+import os, psutil
+
 
 class Params:
 
@@ -17,17 +19,19 @@ class Params:
         self.amountOfOffspring = 150    # amount of trials to generate a child (see prc)
         self.k = 5                      # for k-tournament selection
         self.distanceMatrix = dM        # matrix with the cost between cities
-        self.pheur = 0.3                # % of the pop that is initialized with nearest neighbour heuristic
+        self.pheur = 0.25               # % of the pop that is initialized with nearest neighbour heuristic
         self.alpha = 0.3                # probability of mutation
 
 
 class Individual:
     def __init__(self, tour):
-        self.tour = tour        # tour of cities
-        self.prc = 0.99         # probability of recombination
-        self.pcw = 0.2          # probability of crowding
-        self.cost = 0           # init value
-        self.uptodate = False   # flag if cost of a tour is still up-to-date
+        self.tour = tour                # tour of cities
+        self.prc = 0.99                 # probability of recombination
+        self.pcw = 0.1                  # probability of crowding
+        self.cost = 0                   # init value
+        self.edgeset = {}               # set of edges from the tour
+        self.cost_uptodate = False      # flag if cost of a tour is still up-to-date
+        self.edges_uptodate = False     # flag to check if edge set of a tour is still up-to-date
 
 
 class r0680462:
@@ -39,14 +43,14 @@ class r0680462:
     """ calculate the cost of a tour, used as fitness function """
     def cost(self, ind, distanceMatrix):
         tour = ind.tour
-        if ind.uptodate:  # no recalculation needed
+        if ind.cost_uptodate:  # no recalculation needed
             cost = ind.cost
         else:
             cost = distanceMatrix[tour[len(tour)-1]][tour[0]]  # cost between first and last city to make circle complete
             for i in range(len(tour) - 1):
                 cost += distanceMatrix[tour[i]][tour[i+1]]
             ind.cost = cost
-            ind.uptodate = True  # cost is up-to-date
+            ind.cost_uptodate = True  # cost is updated
         return cost
 
     """ calculate the distance between two cities """
@@ -90,19 +94,24 @@ class r0680462:
         tour2 = ind2.tour
         length = len(tour1)
 
-        # save all edges of first tour
-        edge = tour1[0], tour1[-1]
-        edges1 = {edge}
-        for i in range(1, len(tour1)):
-            edge = tour1[i], tour1[i-1]
-            edges1.add(edge)
+        if ind1.edges_uptodate:
+            edges1 = ind1.edgeset
+        else:  # recalculate edge set of first tour
+            edge = tour1[0], tour1[-1]
+            edges1 = {edge}
+            for i in range(1, len(tour1)):
+                edge = tour1[i], tour1[i-1]
+                edges1.add(edge)
 
         # same for second tour
-        edge = tour2[0], tour2[-1]
-        edges2 = {edge}
-        for i in range(1, len(tour1)):
-            edge = tour2[i], tour2[i-1]
-            edges2.add(edge)
+        if ind2.edges_uptodate:
+            edges2 = ind2.edgeset
+        else:
+            edge = tour2[0], tour2[-1]
+            edges2 = {edge}
+            for i in range(1, len(tour1)):
+                edge = tour2[i], tour2[i-1]
+                edges2.add(edge)
 
         return length - len(edges1.intersection(edges2))  # return amount of different edges
 
@@ -113,14 +122,13 @@ class r0680462:
         #for i in range(len(population)):
          #   all_distances.append(self.different_edges_distance(ind, population[i]))
         #index = all_distances.index(min(all_distances))
-        #print(index)
         # closest to sampled individuals
         inds = []
         for i in range(5):  # sample 5 individuals
             inds.append(random.randint(0, len(population) - 1))  # fill list with indices of the sampled inds
             all_distances.append(self.different_edges_distance(ind, population[inds[i]]))  # calculate distances
         index = all_distances.index(min(all_distances))  # index of closest individual
-        #print("index", index)
+
         return population[inds[index]], inds[index]
 
     """ initializes the population with a % of heuristic individuals """
@@ -179,7 +187,7 @@ class r0680462:
     """ randomly swaps two cities of a tour """
     def swap_mutation(self, individual, nlen, params):
         if random.random() < params.alpha:
-            individual.uptodate = False  # cost of the tour has changed
+            individual.cost_uptodate = False  # cost and edge set of the tour will change
             i1 = random.randint(0, nlen - 1)
             i2 = i1
             while i1 == i2:
@@ -189,47 +197,48 @@ class r0680462:
             individual.tour = tour
 
     """ reverses a random selected part of the tour"""
-    def rs_mutation(self, individual, nlen, params):
-        if random.random() < params.alpha:
-            individual.uptodate = False
+    def rs_mutation(self, ind, nlen, params):
+        if random.random() < params.alpha   :
+            ind.cost_uptodate = ind.edges_uptodate = False
             start = random.randint(0, nlen - 1)
             end = start
             while start == end:
                 end = random.randint(0, nlen - 1)
             if start > end:
                 start, end = end, start
-            tour = individual.tour
+            tour = ind.tour
             tour[start:end+1] = np.flip(tour[start:end+1])  # reverse part of tour
 
     """ inserts a random picked city next to an other one """
-    def insert_mutation(self, individual, nlen, params):
+    def insert_mutation(self, ind, nlen, params):
         if random.random() < params.alpha:
-            individual.uptodate = False
+            ind.cost_uptodate = ind.edges_uptodate = False
             i1 = random.randint(0, nlen - 2)
             i2 = i1
             while i1 == i2:
                 i2 = random.randint(0, nlen - 1)
             if i1 > i2:
                 i1, i2 = i2, i1
-            tour = individual.tour
+            tour = ind.tour
             tour = np.insert(tour, i1+1, tour[i2])  # insert value at i2 next to i1
             tour = np.delete(tour, i2+1)
-            individual.tour = tour
+            ind.tour = tour
 
     """ random part of the tour have their positions scrambled"""
-    def scramble_mutation(self, individual, nlen, params):
+    def scramble_mutation(self, ind, nlen, params):
         if random.random() < params.alpha:
+            ind.cost_uptodate = ind.edges_uptodate = False
             i1 = random.randint(0, nlen - 1)
             i2 = i1
             while i1 == i2:
                 i2 = random.randint(0, nlen - 1)
             if i1 > i2:
                 i1, i2 = i2, i1
-            tour = individual.tour
+            tour = ind.tour
             subtour = tour[i1:i2]
             random.shuffle(subtour)
             tour[i1:i2] = subtour
-            individual.tour = tour
+            ind.tour = tour
 
     """ picks one of the crossover operators (weighted) """
     def crossover(self, p1, p2, offspring, nlen, params):
@@ -337,84 +346,76 @@ class r0680462:
     def dpx_crossover(self, p1, p2, offspring, nlen, params):
         tour1 = p1.tour
         tour2 = p2.tour
-        # do order crossover for equals tours
+        # no dpx crossover but order crossover for equals tours
         comparison = tour1 == tour2
         if comparison.all():
-            self.order_crossover(p1,p2, offspring, nlen, params)
-
-        length = len(tour1)-1
+            self.order_crossover(p1, p2, offspring, nlen)
 
         # convert p1 to a graph structure
-        graph_p1 = {tour1[0]: [tour1[1], tour1[length]]}  # edges of the first node
-        for i in range(1, length):
+        graph_p1 = {tour1[0]: [tour1[1], tour1[-1]]}  # edges of the first node
+        for i in range(1, len(tour1) - 1):
             graph_p1[tour1[i]] = [tour1[i+1], tour1[i-1]]
-        graph_p1[tour1[length]] = [tour1[0], tour1[length-1]]
+        graph_p1[tour1[-1]] = [tour1[0], tour1[-2]]
 
         # same for p2
-        graph_p2 = {tour2[0]: [tour2[1], tour2[length]]}  # edges of the first node
-        for i in range(1, length):
+        graph_p2 = {tour2[0]: [tour2[1], tour2[-1]]}  # edges of the first node
+        for i in range(1, len(tour2) - 1):
             graph_p2[tour2[i]] = [tour2[i+1], tour2[i-1]]
-        graph_p2[tour2[length]] = [tour2[0], tour2[length-1]]
+        graph_p2[tour2[-1]] = [tour2[0], tour2[-2]]
 
         # create graph with mutual edges of the parents
         child_graph = {}
-        for i in range(length+1):
+        for i in range(len(tour1)):
             child_graph[i] = [x for x in graph_p1[i] if x in graph_p2[i]]
 
-        single_edge_nodes = list()
-        zero_or_single_edge_nodes = list()
-        double_edge_nodes = list()
+        node_se = list()  # list for the node with single edges
+        node_z_or_se = list()  # list for the zero edge nodes and single edge nodes
+        node_de = list()  # list for the nodes with double edges
         for i in range(len(child_graph)):
             if len(child_graph[i]) == 2:
-                double_edge_nodes.append(i)
-            elif len(child_graph[i]) ==1:
-                zero_or_single_edge_nodes.append(i)
-                single_edge_nodes.append(i)
+                node_de.append(i)
+            elif len(child_graph[i]) == 1:
+                node_se.append(i)
+                node_z_or_se.append(i)
             elif len(child_graph[i]) == 0:
-                zero_or_single_edge_nodes.append(i)
+                node_z_or_se.append(i)
 
-        child_tour = np.full(nlen, -1)
-        if len(zero_or_single_edge_nodes) > 0:
-            start = random.choice(zero_or_single_edge_nodes)
+        child_tour = np.full(nlen, -1)  # create empty array
+        if len(node_z_or_se) > 0:
+            start = random.choice(node_z_or_se)
             child_tour[0] = start
-            zero_or_single_edge_nodes.remove(child_tour[0])
+            node_z_or_se.remove(child_tour[0])
         else:
             start = random.randint(0, nlen-1)
             child_tour[0] = start
 
-        for i in range(len(child_tour)-1):
+        for i in range(len(child_tour) - 1):
             if len(child_graph[child_tour[i]]) != 0:
                 child_tour[i+1] = child_graph[child_tour[i]][0]
                 child_graph[child_tour[i]].pop(0)  # remove edge between child_tour[i] and child_tour[i+1]
                 child_graph[child_tour[i+1]].remove(child_tour[i])  # remove edge between child_tour[i+1] and child_tour[i]
-                if child_tour[i+1] in zero_or_single_edge_nodes:
-                    zero_or_single_edge_nodes.remove(child_tour[i+1])
+                if child_tour[i+1] in node_z_or_se:
+                    node_z_or_se.remove(child_tour[i+1])
             else:
-                # node has no edges left
-                # zero_or_single_edge_nodes.remove(child_tour[i])
-
-                # calculate the distance to all start nodes
+                # no edges left
+                # sort all distances from node to start nodes
                 distances = list()
-                for node in zero_or_single_edge_nodes:
+                for node in node_z_or_se:
                     distances.append(params.distanceMatrix[child_tour[i]][node])
 
-                #todo makes no sense pop => indeces are different in distances => dont match indices in zero_or_single_edge_nodes
-                #sort zero_or_single_edge_nodes according to distance and than for loop over the nodes instead of while!
-                #print("distances: ", distances)
-                #print("zero and ones: ", zero_or_single_edge_nodes)
-                zero_or_single_edge_nodes = sorted(zero_or_single_edge_nodes, key=lambda x: distances[zero_or_single_edge_nodes.index(x)])
-                #print("sorted zero: ", zero_or_single_edge_nodes)
+                node_z_or_se = sorted(node_z_or_se, key=lambda x: distances[node_z_or_se.index(x)])
 
-                for j, node in enumerate(zero_or_single_edge_nodes):
+                for j, node in enumerate(node_z_or_se):
                     if node not in graph_p1[child_tour[i]] and node not in graph_p2[child_tour[i]]:
                         child_tour[i+1] = node
-                        zero_or_single_edge_nodes.remove(node)
+                        node_z_or_se.remove(node)
                         break
                     else:
-                        if j == len(zero_or_single_edge_nodes)-1:  # last node in list => add this one
+                        if j == len(node_z_or_se)-1:  # add last node in list to child
                             child_tour[i+1] = node
-                            zero_or_single_edge_nodes.remove(node)
+                            node_z_or_se.remove(node)
 
+        # make an individual of the child tour and append to the offspring
         child = Individual(child_tour)
         offspring.append(child)
 
@@ -473,8 +474,11 @@ class r0680462:
         plt.autoscale()
         ax = plt.gcf().gca()
         data = pd.read_csv(filename, delimiter=',', header=1)
-        data.plot(x='# Iteration', y=' Mean value', kind='line', label='mean value', c='teal', linewidth=2, ax=ax)
-        data.plot(x='# Iteration', y=' Best value', kind='line', label='best value', c='firebrick', linewidth=2, ax=ax)
+        data.plot(x=' Elapsed time', y=' Mean value', kind='line', label='mean value', c='teal', linewidth=2, ax=ax)
+        data.plot(x=' Elapsed time', y=' Best value', kind='line', label='best value', c='firebrick', linewidth=2, ax=ax)
+        plt.xlabel('Elapsed time [s]')
+        plt.ylabel('Cost')
+        plt.grid(alpha=0.6, linewidth=0.3)
         plt.show()
 
     """ The evolutionary algorithm's main loop """
@@ -530,8 +534,8 @@ class r0680462:
             population.extend(offspring)
 
             # elimination by crowding or elitism
-            #population = self.crowding2(population, params)
-            population = self.elimination(population, params)  # (l+µ) elimination
+            population = self.crowding2(population, params)
+            #population = self.elimination(population, params)  # (l+µ) elimination
             #population = self.elimination(offspring, params)  # (l,µ) elimination
 
 
@@ -540,28 +544,17 @@ class r0680462:
             bestObjective = self.cost(best_ind, distanceMatrix)
             bestSolution = best_ind.tour
 
-            # alpha value based on ranking in population, from 0.35 → 0.6
-            #for i in range(params.popsize):
-                    #   population[i].alpha = 0.25 / params.popsize * i + 0.35
-            #    ind.alpha = 0.7 / (1 + math.exp(-0.1 * (it - 0.35)))  # logistic function _/¯
-            #print("alpha ", population[params.popsize-1].alpha)
-
-            if it % 50 == 0:
-                params.alpha = 0.00025 * it + 0.3
-            print(params.alpha)
-
-
             itT = time.time() - start
             print(it, ")", f'{itT*1000: 0.1f} ms ',  "mean cost: ", f'{meanObjective:0.2f}', "Lowest/best cost: ",
                   f'{bestObjective:0.2f}', "div.: ", f'{meanObjective-bestObjective:0.2f}')
 
             # stop criterion
-            if it % 100 == 0:  # check if there is improvement every x iterations
+            """if it % 50 == 0:  # check if there is improvement every x iterations
                 if last_best_cost <= bestObjective:
                     improvement = False
                     print("STOP by no improvement")
                 else:
-                    last_best_cost = bestObjective
+                    last_best_cost = bestObjective"""
 
             # Call the reporter with:
             #  - the mean objective function value of the population
@@ -573,6 +566,12 @@ class r0680462:
                 print("STOP by timeout")
                 break
 
+            # dynamic parameters
+            """if int(300-timeLeft) % 2 == 0:
+                params.alpha = 0.6 / (1 + math.exp(-0.1 * ((300 - timeLeft) - 0.35)))  # logistic function _/¯
+            print(params.alpha)"""
+
+        # output some values at the end
         print("best tour", best_ind.tour)
         print("cost best tour", f'{bestObjective: 0.2f}')
         print("execution time", f'{300-timeLeft: 0.2f} sec')
@@ -590,7 +589,7 @@ class main:
 """
     mean = []
     best = []
-    for i in range(2):
+    for i in range(1000):
         tsp = r0680462()
         meanobj, bestobj = tsp.optimize("tour29.csv")
         mean.append(meanobj)
@@ -605,11 +604,15 @@ class main:
     plt.xlabel('Cost')
     plt.ylabel('Frequency')
     plt.title('Variation on best individual')
+    plt.annotate('avg: {:.1f}\n stddev: {:.1f}'.format(avg_best, std_best), xy=(0.75, 0.9), xycoords='axes fraction')
+    plt.savefig('variationbest.pdf', format='pdf')
     plt.figure()
     plt.hist(mean)
     plt.xlabel('Cost')
     plt.ylabel('Frequency')
     plt.title('Variation on mean population')
+    plt.annotate('avg: {:.1f}\n stddev: {:.1f}'.format(avg_mean, std_mean), xy=(0.75, 0.9), xycoords='axes fraction')
+    plt.savefig('variationmean.pdf', format='pdf')
     plt.show()
     tsp.plot("r0680462.csv")  # todo remove when finalizing code
 """
