@@ -17,11 +17,15 @@ class Params:
         self.amountOfOffspring = 150    # amount of trials to generate a child (see prc)
         self.k = 5                      # for k-tournament selection
         self.distanceMatrix = dM        # matrix with the cost between cities
+        self.nlen = dM.shape[0]         # length of a tour
         self.pheur = 0.25               # % of the pop that is initialized with nearest neighbour heuristic
         self.minalpha = 0.3             # minimum value for alpha
         self.maxalpha = 0.5             # maximum value for alpha
         self.alpha = self.minalpha      # probability of mutation
         self.pcw = 0.15                 # probability of crowding
+
+        if self.nlen > 800:
+            self.pcw = 0.0              # no crowding for big tours, too much diversity
 
 
 class Individual:
@@ -131,24 +135,24 @@ class r0680462:
         return population[inds[index]], inds[index]
 
     """ initializes the population with a % of heuristic individuals """
-    def init(self, params, nlen):
+    def init(self, params):
         population = []
         # random initialization
         for i in range(int(params.popsize*(1-params.pheur))):
-            tour = np.random.permutation(nlen)
+            tour = np.random.permutation(params.nlen)
             ind = Individual(tour)
             population.append(ind)
         # initialize % of pop with heuristic good individuals
         for i in range(int(params.popsize*params.pheur)):
-            tour = self.init_nn(params, nlen)
+            tour = self.init_nn(params)
             ind = Individual(tour)
             population.append(ind)
         return population
 
     """ initializes a tour with nearest neighbours heuristic """
-    def init_nn(self, params, nlen):
-        start = np.random.choice(range(nlen))  # random pick first city
-        cities = set(range(nlen))  # all cities
+    def init_nn(self, params):
+        start = np.random.choice(range(params.nlen))  # random pick first city
+        cities = set(range(params.nlen))  # all cities
         tour = [start]
         unvisited = set(cities - {start})  # unvisited cities)
         unvisited = list(unvisited)
@@ -176,12 +180,12 @@ class r0680462:
         return population[inds[index]], inds[index]
 
     """ picks one of the 4 mutation operators (weighted) """
-    def mutation(self, individual, nlen, params):
+    def mutation(self, individual, params):
         mutations = [self.swap_mutation,
                      self.insert_mutation,
                      self.rs_mutation, self.rs_mutation, self.rs_mutation, self.rs_mutation,
                      self.scramble_mutation, self.scramble_mutation]
-        random.choice(mutations)(individual, nlen, params)
+        random.choice(mutations)(individual, params.nlen, params)
 
     """ randomly swaps two cities of a tour """
     def swap_mutation(self, individual, nlen, params):
@@ -240,11 +244,11 @@ class r0680462:
             ind.tour = tour
 
     """ picks one of the crossover operators (weighted) """
-    def crossover(self, p1, p2, offspring, nlen, params):
+    def crossover(self, p1, p2, offspring, params):
         crossovers = [self.order_crossover, self.order_crossover, self.order_crossover, self.order_crossover,
                       self.order_crossover, self.order_crossover, self.order_crossover, self.order_crossover,
                       self.order_crossover, self.dpx_crossover]
-        random.choice(crossovers)(p1, p2, offspring, nlen, params)
+        random.choice(crossovers)(p1, p2, offspring, params.nlen, params)
 
     """ order crossover """
     def order_crossover(self, p1, p2, offspring, nlen, params=None):
@@ -489,18 +493,17 @@ class r0680462:
         file.close()
 
         # initialize parameters
-        nlen = distanceMatrix.shape[0]
         params = Params(distanceMatrix)
 
         # ban unconnected cities from population by setting their cost extremely high
-        for i in range(nlen):
-            for j in range(nlen):
+        for i in range(params.nlen):
+            for j in range(params.nlen):
                 if distanceMatrix[i][j] == math.inf:
-                    distanceMatrix[i][j] = 999999
+                    distanceMatrix[i][j] = 10000
                     params.pcw = 0.05  # small crowding to avoid impossible tours reach next generation
 
         # initialize population
-        population = self.init(params, nlen)
+        population = self.init(params)
 
         # start loop
         improvement = True
@@ -515,21 +518,21 @@ class r0680462:
                 parent1, index = self.selection(population, params)
                 parent2, index = self.selection(population, params)
                 # order crossover, cycle crossover or dpx crossover to generate offspring
-                #self.order_crossover(parent1, parent2, offspring, nlen)  # create child
-                #self.order_crossover(parent2, parent1, offspring, nlen)  # create second child
-                #self.dpx_crossover(parent1, parent2, offspring, nlen, params)
-                #self.dpx_crossover(parent2, parent1, offspring, nlen, params)
-                #self.cycle_crossover(parent1, parent2, offspring, nlen, params)  # generates two childs
-                self.crossover(parent1, parent2, offspring, nlen, params)  # picks random one of the crossover operators (weighted)
-                self.crossover(parent2, parent1, offspring, nlen, params)  # second child
+                #self.order_crossover(parent1, parent2, offspring, params.nlen)  # create child
+                #self.order_crossover(parent2, parent1, offspring, params.nlen)  # create second child
+                #self.dpx_crossover(parent1, parent2, offspring, params.nlen, params)
+                #self.dpx_crossover(parent2, parent1, offspring, params.nlen, params)
+                #self.cycle_crossover(parent1, parent2, offspring, params.nlen, params)  # generates two childs
+                self.crossover(parent1, parent2, offspring, params)  # picks random one of the crossover operators (weighted)
+                self.crossover(parent2, parent1, offspring, params)  # second child
 
             # mutation on the offspring
             for i in range(0, len(offspring)):  # 0/1 to (not) mutate best individual from offspring
-                self.mutation(offspring[i], nlen, params)
+                self.mutation(offspring[i], params)
 
             # mutation seed population
             for i in range(1, (len(population)-1)):  # 1 to not mutate the best three individual of the population
-                self.mutation(population[i], nlen, params)
+                self.mutation(population[i], params)
 
 
             # combine seed population with offspring into new population
