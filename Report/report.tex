@@ -96,8 +96,6 @@ This problem has been adressed by a number of techniques. By use of a heuristic 
 
 Now, the found result is always better than the heuristic value. However, for the larger tours, the found result sometimes is still too far away from the optimal value after 5 minutes. 
 
-% todo 
-
 \section{Final design of the evolutionary algorithm}\label{sec:design} 
 
 % \RemoveMe{\textbf{Goal:} Based on this section, we will evaluate insofar as you are able to design and implement an advanced, effective evolutionary algorithm for solving a model problem.}
@@ -139,7 +137,7 @@ Four mutation operaters are implemented in order to increase randomness in the s
   \item scramble mutation: shuffles the cities of a random selected part of the tour
 \end{itemize}
 One of these operators is picked weighted. Reverse sequence mutation and scramble mutation occurs more (4x and 2x) because they yield better solutions \cite{mutationperformance}.
-The probability of mutation is set with the parameter $\alpha$. % todo beschrijven
+The probability of mutation is set with the parameter $\alpha$. The $\alpha$-value is set high to ensure that the algorithm does not get stuck in one of the many local optima introduced by the initialization. In addition, the value starts at 0.3 and increases in time to the maximum value of 0.5 in order to avoid premature convergence. 
 
 \subsection{Recombination operators}\label{ssec:recombination}
 
@@ -229,7 +227,7 @@ The other parameters are determined by trial-and-error. This is done by adjustin
 \subsection{Other considerations}\label{ssec:considerations}
 
 % \ReplaceMe{Did you consider other items not listed above, such as elitism, multiobjective optimization strategies (e.g., island model, pareto front approximation), a parallel implementation, or other interesting computational optimizations (e.g. using advanced algorithms or data structures)? You can describe them here or add additional subsections as needed.}
-\paragraph{Computational optimizations:} Some code optimizations have been done in order to do as much iterations in the five minute time limit. Redundant calculations of the cost of a tour and the edges of a tour (for calculating distances) are avoided by saving these values in the Individual 'object' and only recalculating them when a tour has changed. This seemed a trivial thing, but actually saves a lot of time. All paramets of the GA also have been grouped in a separate class to obtain more overview in the code. 
+\paragraph{Computational optimizations:} Some code optimizations have been done in order to do as much iterations in the five minute time limit. Redundant calculations of the cost of a tour and the edges of a tour (for calculating distances between individuals) are avoided by saving these values in the Individual 'object' and only recalculating them when a tour has changed. This seemed a trivial thing, but actually saves a lot of time. All paramets of the GA also have been grouped in a separate class to obtain more overview in the code. 
 
 \paragraph{Not implemented:} Some other interesting optimizations have been considered, but not implemented because of the limited time for this project. I tried implementing the island model, because I believe it may yield good results. I did not proceed with this because it completely messed up the structure in my code and I no longer had a good understanding of the code. \\
 
@@ -294,7 +292,7 @@ Figure~\ref{fig:variations} shows the histograms that are obtained when running 
     \end{subfigure}
     \begin{subfigure}{0.5\linewidth}
       \centering
-      \includegraphics[width=\linewidth]{img/variationmean2.pdf      }
+      \includegraphics[width=\linewidth]{img/variationmean2.pdf}
       \caption{variation on the mean individual}
       \label{fig:variationmean}
     \end{subfigure}
@@ -303,7 +301,9 @@ Figure~\ref{fig:variations} shows the histograms that are obtained when running 
   \end{figure}
 
 \subsection{tour100.csv}
+A typical convergence graph of this problem is shown in Figure~\ref{fig:convergence100}. It can be seen that the algorithm converges too quickly after \SI{50}{\second}. At this point, the algorithm don't find a better solution and start searching in a wrong direction (hence the increase in mean cost). The spikes on the mean cost is due to tours with disconnected cities. The cost of these tours have been set very high, which causes the spikes in the mean population.
 
+The lowest cost that has been found with this algorithm is 7521. This is better than the heuristic value of 8637, but still 200 higher than the optimal value of around 7350. The hyperparameters are probably not optimal for this problem.
 \begin{figure}[H]
   \centering
   \includegraphics[width=.8\linewidth]{img/convergence100.pdf}
@@ -325,7 +325,7 @@ Figure~\ref{fig:variations} shows the histograms that are obtained when running 
 % What is the best tour length you found? 
 
 % Interpret your results. How do you rate the performance of your algorithm (time, memory, speed of convergence, diversity of population, quality of the best solution, etc)? Is your solution close to the optimal one?}
-The best found tour length is 9843. Figure~\ref{fig:convergence194} shows a typical convergence graph. 
+Figure~\ref{fig:convergence194} shows a typical convergence graph. The best found tour length is 9843. The diversity here is good, as the mean cost always is a bit higher than the best cost. The algorithm finds in 5 minutes a value that is clearly better than the heuristic value (11385). The optimal value is 800 less, so the algorithm still can be improved to find a better solution in five minutes. 
 \begin{figure}[H]
   \centering
   \includegraphics[width=.8\linewidth]{img/convergence194.pdf}
@@ -334,20 +334,21 @@ The best found tour length is 9843. Figure~\ref{fig:convergence194} shows a typi
 \end{figure}
 
 \subsection{tour929.csv}
+Figure~\ref{fig:convergence194} shows a typical convergence graph. The best found tour has a cost of 112205. This is slightly better than the heuristic value (113683). However, the optimal value of 95300 is still far away. The algorithm does not perform well on bigger tours because the parameters are not optimized. The diversity is too high and the algorithm does not converge to an optimal value. The algorithm is too explorative here. Also, the algorithm is a lot slower on these bigger tours and less iterations can be done in five minutes. 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=.8\linewidth]{img/convergence194.pdf}
+  \includegraphics[width=.8\linewidth]{img/convergence929.pdf}
   \caption{Convergence graph tour929}
   \label{fig:convergence929}
-\end{figure}
+\end{figure}.
 
-\ReplaceMe{Run your algorithm on this benchmark problem (with the 5 minute time limit from the Reporter). Include a typical convergence graph, by plotting the mean and best objective values in function of the time (for example based on the output of the Reporter class). 
+% \ReplaceMe{Run your algorithm on this benchmark problem (with the 5 minute time limit from the Reporter). Include a typical convergence graph, by plotting the mean and best objective values in function of the time (for example based on the output of the Reporter class). 
 
-What is the best tour length you found? 
+% What is the best tour length you found? 
 
-Interpret your results. How do you rate the performance of your algorithm (time, memory, speed of convergence, diversity of population, quality of the best solution, etc)? Is your solution close to the optimal one? 
+% Interpret your results. How do you rate the performance of your algorithm (time, memory, speed of convergence, diversity of population, quality of the best solution, etc)? Is your solution close to the optimal one? 
 
-Did your algorithm converge before the time limit? How many iterations did you perform?}
+% Did your algorithm converge before the time limit? How many iterations did you perform?}
 
 
 

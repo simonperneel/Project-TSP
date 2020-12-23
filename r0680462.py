@@ -588,7 +588,7 @@ class r0680462:
 # todo call optimizer in separate file
 class main:
     tsp = r0680462()
-    tsp.optimize("tour29.csv")
+    tsp.optimize("tour100.csv")
     tsp.plot("r0680462.csv")
 
 """
