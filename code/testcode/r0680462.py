@@ -582,3 +582,42 @@ class r0680462:
         print("execution time", f'{300-timeLeft: 0.2f} sec')
 
         return meanObjective, bestObjective
+
+
+# calls optimize function
+# todo call optimizer in separate file
+class main:
+    tsp = r0680462()
+    tsp.optimize("tour100.csv")
+    tsp.plot("r0680462.csv")
+
+"""
+    mean = []
+    best = []
+    for i in range(1000):
+        tsp = r0680462()
+        meanobj, bestobj = tsp.optimize("tour29.csv")
+        mean.append(meanobj)
+        best.append(bestobj)
+
+    avg_best = statistics.mean(best)
+    std_best = statistics.stdev(best)
+    avg_mean = statistics.mean(mean)
+    std_mean = statistics.stdev(mean)
+
+    plt.hist(best)
+    plt.xlabel('Cost')
+    plt.ylabel('Frequency')
+    plt.title('Variation on best individual')
+    plt.annotate('avg: {:.1f}\n stddev: {:.1f}'.format(avg_best, std_best), xy=(0.75, 0.9), xycoords='axes fraction')
+    plt.savefig('variationbest.pdf', format='pdf')
+    plt.figure()
+    plt.hist(mean)
+    plt.xlabel('Cost')
+    plt.ylabel('Frequency')
+    plt.title('Variation on mean population')
+    plt.annotate('avg: {:.1f}\n stddev: {:.1f}'.format(avg_mean, std_mean), xy=(0.75, 0.9), xycoords='axes fraction')
+    plt.savefig('variationmean.pdf', format='pdf')
+    plt.show()
+    tsp.plot("r0680462.csv")  # todo remove when finalizing code
+"""
