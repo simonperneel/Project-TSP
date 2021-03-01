@@ -38,5 +38,5 @@ Elimination is used to prevent the population from growing indefinitively. The g
 
 
 ## Reference
-This documentation is based on the slides of the course *Genetic algorithms and Ev  olutionary computing*, taught by Prof. dr. N. Vannieuwenhoven, KU Leuven, 2020-2021.
+This documentation is based on the slides of the course *Genetic algorithms and Evolutionary computing*, taught by Prof. dr. N. Vannieuwenhoven, KU Leuven, 2020-2021.
 
